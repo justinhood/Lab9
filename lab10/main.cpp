@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <cmath>
 #include <list>
 #include <string>
 #include <vector>
@@ -63,8 +64,8 @@ GLuint treeTexHandle, groundTexHandle;      // a handle to the textures in our O
 // is filled randomly at the start of execution, and then referenced
 // during rendering.
 vector< Point > treeSpritePositions;
-
-
+double PI=3.14159265358;
+bool DOSPHERICAL=false;
 // END GLOBAL VARIABLES ///////////////////////////////////////////////////////
 
 //
@@ -260,14 +261,19 @@ void initScene() {
     // fill up the treeSpritePositions with some meaningful information...
     srand( time(NULL) );
     forestCenter = Point(0, 0, 0);
-    int numSprites = 1;
+    int numSprites = 50;
     float rangeX = numSprites;
     float rangeZ = numSprites;
     for(int i = 0; i < numSprites; i++) {
         // TODO #1: Populate our sprite locations
-
+	double rando=rand()%numSprites;
+	double over2=numSprites/2;
+	double xPos = rando-over2;
+	double yPos=0;
+	double zPos = i-over2;
+	Point toAdd=Point(xPos,yPos,zPos);
+	treeSpritePositions.push_back(toAdd);
     }
-    
     // and enable alpha blending once and for all.
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -346,13 +352,84 @@ void renderScene(void) {
     glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
     
     // TODO #4: Sort trees by distance to camera
-
+	vector<double> dist;
+	double temp;
+	Point pTemp;
+	Point cameraXZ=Point(cameraXYZ.getX(), (double)0, cameraXYZ.getZ());
+	for(int i=0; i<treeSpritePositions.size(); i++){
+		temp=sqrt(pow(cameraXZ.getX()-treeSpritePositions[i].getX(),2)+pow(cameraXZ.getY()-treeSpritePositions[i].getY(),2)+pow(cameraXZ.getZ()-treeSpritePositions[i].getZ(),2));
+		dist.push_back(temp);
+	}
+	for(int i=0; (i<=treeSpritePositions.size()); i++){
+		for(int j=0; j<(treeSpritePositions.size()-1);j++){
+		if(dist[i]<dist[i+1]){
+			temp=dist[i];
+			pTemp=treeSpritePositions[i];
+			
+			dist[i]=dist[i+1];
+			treeSpritePositions[i]=treeSpritePositions[i+1];
+			dist[i+1]=temp;
+			treeSpritePositions[i+1]=pTemp;
+		}
+		}
+	}
+	
     // TODO #3: Compute rotation of tree to face camera
-    
+	float lookAt[3], objToCam[3], upAux[3], objToCamPrime[3];
+	float angleCos;
+	double norm;
+	lookAt[0]=0;
+	lookAt[1]=0;
+	lookAt[2]=1;
     for( unsigned int i = 0; i < treeSpritePositions.size(); i++ ) {
         glPushMatrix(); {
-            // TODO #2: Draw our sprite!
-            
+		glTranslatef(treeSpritePositions[i].getX(), treeSpritePositions[i].getY(), treeSpritePositions[i].getZ());
+		//Get vector to camera
+		objToCam[0]=cameraXYZ.getX()-treeSpritePositions[i].getX();
+		objToCam[1]=0;
+		objToCam[2]=cameraXYZ.getZ()-treeSpritePositions[i].getZ();
+		norm=sqrt(pow(objToCam[0],2)+pow(objToCam[1],2)+pow(objToCam[2],2));
+
+		//Normalize
+		objToCam[0]=objToCam[0]/norm;
+		objToCam[1]=objToCam[1]/norm;
+		objToCam[2]=objToCam[2]/norm;
+	//GetUp
+		upAux[0]=lookAt[1]*objToCam[2]-objToCam[1]*lookAt[2];
+		upAux[1]=lookAt[2]*objToCam[0]-objToCam[2]*lookAt[0];
+		upAux[2]=lookAt[0]*objToCam[1]-objToCam[0]*lookAt[1];
+		//angle
+		angleCos=lookAt[0]*objToCam[0]+lookAt[1]*objToCam[1]+lookAt[2]*objToCam[2];
+		if((angleCos<1) && (angleCos>-1)){
+			glRotatef(acos(angleCos)*180/PI,upAux[0],upAux[1],upAux[2]);
+		}
+		if(DOSPHERICAL){
+		//Secondary Spherical
+		objToCamPrime[0]=cameraXYZ.getX()-treeSpritePositions[i].getX();
+		objToCamPrime[1]=cameraXYZ.getY()-treeSpritePositions[i].getY();
+		objToCamPrime[2]=cameraXYZ.getZ()-treeSpritePositions[i].getZ();
+		
+		norm=sqrt(pow(objToCamPrime[0],2)+pow(objToCamPrime[1],2)+pow(objToCamPrime[2],2));
+		//Normalize
+		objToCamPrime[0]=objToCamPrime[0]/norm;
+		objToCamPrime[1]=objToCamPrime[1]/norm;
+		objToCamPrime[2]=objToCamPrime[2]/norm;
+		
+		//Compute Second Angle
+		angleCos=objToCam[0]*objToCamPrime[0]+objToCam[1]*objToCamPrime[1]+objToCam[2]*objToCamPrime[2];
+		if((angleCos<1) && (angleCos>-1)){
+			if(objToCamPrime[1]<0){
+				glRotatef(acos(angleCos)*180/PI,1,0,0);
+			}
+			else{
+				glRotatef(acos(angleCos)*180/PI,-1,0,0);
+			}
+		}
+		}
+
+
+            // TODO #2: Draw our sprite!  
+	 drawTexturedSprite(20,20); 
         }; glPopMatrix();
     }
     
@@ -371,6 +448,9 @@ void normalKeysDown(unsigned char key, int x, int y) {
         case 'Q':
             exit(0);
             break;
+	case 'S':
+		DOSPHERICAL=!DOSPHERICAL;
+		break;
     }
 }
 
@@ -405,7 +485,7 @@ int main(int argc, char **argv) {
     glutCreateWindow("Lab10: Billboarding");
     
     //give the camera a 'pretty' starting point!
-    cameraRadius = 25.0f;
+    cameraRadius = 60.0f;
     cameraTheta = 2.80;
     cameraPhi = 2.0;
     
